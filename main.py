@@ -9,7 +9,7 @@ Install dependency:
 Examples:
 	python main.py
 	python main.py --input-file input.txt --output speech.mp3
-	python main.py --voice en-US-JennyNeural --output narration.mp3
+	python main.py --voice en-US-GuyNeural --output narration.mp3
 """
 
 import argparse
@@ -19,7 +19,7 @@ from pathlib import Path
 import edge_tts
 
 
-DEFAULT_VOICE = "en-US-AriaNeural"
+DEFAULT_VOICE = "en-US-GuyNeural"
 
 
 def parse_args() -> argparse.Namespace:
@@ -45,7 +45,7 @@ def parse_args() -> argparse.Namespace:
 		type=str,
 		default=DEFAULT_VOICE,
 		help=(
-			"Neural English voice, e.g. en-US-AriaNeural, en-US-JennyNeural, "
+			"Neural English voice, e.g. en-US-GuyNeural, en-US-ChristopherNeural, "
 			"en-GB-SoniaNeural"
 		),
 	)
