@@ -1,100 +1,163 @@
-## Feature list
-- [ ] Different type of voice
-- [ ] audio speed modify 
-
-## Todo
-make a desktop app so that anyone can use this. just by installing this
-
-
-
-### female voice 
-```python
-python main.py --voice en-US-JennyNeural 
-```
-
-### Male voice
-```
-```
-
+# Text-to-Audio Workflow
 
 ## 1) Setup
 
-From this project folder, install dependency:
+Install dependency once:
 
+```bash
 pip install edge-tts
+```
 
 ## 2) Basic Run
 
-Put your text in `input.txt`, then run:
+Put text in `input.txt`, then run:
 
+```bash
 python main.py
+```
 
-Output is generated automatically in `audio/` with a sortable datetime filename, for example:
+If `python` is not available:
 
-audio/tts_20260314_153012_123456.mp3
-
-## 3) Command Parameters
-
-All parameters:
-
-- `--input-file` (Path, default: `input.txt`)
-	- Text file to read input from.
-
-- `--output` (Path, optional)
-	- Exact output file path.
-	- If omitted, file is auto-created inside `audio/` with unique datetime name.
-
-- `--voice` (str, default: `en-US-GuyNeural`)
-	- Neural voice ID.
-	- Examples: `en-US-GuyNeural`, `en-US-ChristopherNeural`, `en-US-JennyNeural`.
-
-- `--emotion` (str, default: `neutral`)
-	- Emotion preset to reduce robotic tone.
-	- Choices: `neutral`, `cheerful`, `calm`, `sad`, `energetic`.
-
-- `--rate` (str, optional)
-	- Speech speed, e.g. `+0%`, `-10%`, `+15%`.
-	- Overrides rate from `--emotion` preset.
-
-- `--pitch` (str, optional)
-	- Voice pitch, e.g. `+0Hz`, `-20Hz`, `+40Hz`.
-	- Overrides pitch from `--emotion` preset.
-
-- `--volume` (str, optional)
-	- Volume, e.g. `+0%`, `-5%`, `+10%`.
-	- Overrides volume from `--emotion` preset.
-
-## 4) Examples
-
-Use defaults (`input.txt`, male voice, neutral emotion):
-
-python main.py
-
-Use cheerful style:
-
-python main.py --emotion cheerful
-
-Use custom input file:
-
-python main.py --input-file my_text.txt
-
-Use custom output filename:
-
-python main.py --output audio/story.mp3
-
-Use custom male voice:
-
-python main.py --voice en-US-ChristopherNeural
-
-Manually tune voice:
-
-python main.py --emotion calm --rate -6% --pitch -10Hz --volume +2%
-
-## 5) Troubleshooting
-
-- If you get shell errors, make sure you run plain commands (no Markdown link formatting).
-- If command `python` fails, use:
-
+```bash
 python3 main.py
+```
+
+Default output is auto-created in `audio/` with sortable datetime name:
+
+`audio/tts_YYYYMMDD_HHMMSS_microseconds.mp3`
+
+---
+
+## 3) Parameters (Grouped)
+
+### A) Input Parameters
+
+#### `--input-file`
+- Type: `Path`
+- Default: `input.txt`
+- Purpose: Reads English text from file.
+- Example:
+
+```bash
+python main.py --input-file chapter1.txt
+```
+
+### B) Output Parameters
+
+#### `--output`
+- Type: `Path`
+- Default: auto-generated (`audio/tts_...mp3`)
+- Purpose: Set exact output file name/path.
+- Example:
+
+```bash
+python main.py --output audio/story.mp3
+```
+
+### C) Voice Selection Parameters
+
+#### `--voice`
+- Type: `str`
+- Default: `en-US-GuyNeural`
+- Purpose: Choose TTS voice.
+- Example values:
+  - `en-US-GuyNeural` (male)
+  - `en-US-ChristopherNeural` (male)
+  - `en-US-JennyNeural` (female)
+  - `en-US-AriaNeural` (female)
+- Example:
+
+```bash
+python main.py --voice en-US-ChristopherNeural
+```
+
+### D) Emotion Preset Parameters
+
+#### `--emotion`
+- Type: `str`
+- Default: `neutral`
+- Allowed values (all supported):
+  - `neutral`
+  - `cheerful`
+  - `calm`
+  - `sad`
+  - `energetic`
+- Purpose: Applies preset style by adjusting `rate`, `pitch`, and `volume`.
+- Example:
+
+```bash
+python main.py --emotion cheerful
+```
+
+Preset mapping:
+
+| Emotion | Rate | Pitch | Volume |
+|---|---|---|---|
+| neutral | +0% | +0Hz | +0% |
+| cheerful | +8% | +30Hz | +2% |
+| calm | -8% | -12Hz | +0% |
+| sad | -14% | -35Hz | -2% |
+| energetic | +12% | +20Hz | +4% |
+
+### E) Manual Voice Tuning Parameters
+
+These override emotion values if provided.
+
+#### `--rate`
+- Type: `str`
+- Default: from selected `--emotion`
+- Format: percent (examples: `+0%`, `-10%`, `+15%`)
+
+#### `--pitch`
+- Type: `str`
+- Default: from selected `--emotion`
+- Format: Hz (examples: `+0Hz`, `-20Hz`, `+40Hz`)
+
+#### `--volume`
+- Type: `str`
+- Default: from selected `--emotion`
+- Format: percent (examples: `+0%`, `-5%`, `+10%`)
+
+Manual tuning example:
+
+```bash
+python main.py --emotion calm --rate -6% --pitch -10Hz --volume +2%
+```
+
+---
+
+## 4) Complete Command Examples
+
+Default run:
+
+```bash
+python main.py
+```
+
+Female voice:
+
+```bash
+python main.py --voice en-US-JennyNeural
+```
+
+Male voice:
+
+```bash
+python main.py --voice en-US-GuyNeural
+```
+
+Custom input + output:
+
+```bash
+python main.py --input-file notes.txt --output audio/notes.mp3
+```
+
+## 5) Quick Tip
+
+To see parameters anytime:
+
+```bash
+python main.py --help
+```
 
 
