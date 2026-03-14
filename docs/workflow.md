@@ -58,11 +58,11 @@ python main.py --output audio/story.mp3
 
 #### `--voice`
 - Type: `str`
-- Default: `en-US-GuyNeural`
+- Default: `en-US-ChristopherNeural`
 - Purpose: Choose TTS voice.
 - Example values:
-  - `en-US-GuyNeural` (male)
   - `en-US-ChristopherNeural` (male)
+  - `en-US-GuyNeural` (male)
   - `en-US-JennyNeural` (female)
   - `en-US-AriaNeural` (female)
 - Example:
@@ -143,7 +143,7 @@ python main.py --voice en-US-JennyNeural
 Male voice:
 
 ```bash
-python main.py --voice en-US-GuyNeural
+python main.py --voice en-US-ChristopherNeural
 ```
 
 Custom input + output:
