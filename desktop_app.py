@@ -48,12 +48,20 @@ class TextToAudioApp:
         self.is_paused = False
         self.input_placeholder = "Select input text file (optional)"
         self.output_placeholder = "Output file path (optional)"
+        self.rate_placeholder = "e.g. -6% (optional)"
+        self.pitch_placeholder = "e.g. -10Hz (optional)"
+        self.volume_placeholder = "e.g. +2% (optional)"
         self.play_pause_text = tk.StringVar(value="▶ Play")
         self.play_pause_btn: ttk.Button | None = None
         self.storage_placeholder = "Add folder to store audio"
         self.input_file_entry: tk.Entry | None = None
         self.output_file_entry: tk.Entry | None = None
         self.storage_entry: tk.Entry | None = None
+        self.rate_entry: tk.Entry | None = None
+        self.pitch_entry: tk.Entry | None = None
+        self.volume_entry: tk.Entry | None = None
+        self.input_fg_color = "#111111"
+        self.placeholder_fg_color = "#7a7a7a"
 
         self.input_file_var = tk.StringVar(value=self.input_placeholder)
         self.output_file_var = tk.StringVar(value=self.output_placeholder)
@@ -61,9 +69,9 @@ class TextToAudioApp:
         self.theme_var = tk.StringVar(value="System")
         self.voice_var = tk.StringVar(value=DEFAULT_VOICE_LABEL)
         self.emotion_var = tk.StringVar(value="neutral")
-        self.rate_var = tk.StringVar(value="")
-        self.pitch_var = tk.StringVar(value="")
-        self.volume_var = tk.StringVar(value="")
+        self.rate_var = tk.StringVar(value=self.rate_placeholder)
+        self.pitch_var = tk.StringVar(value=self.pitch_placeholder)
+        self.volume_var = tk.StringVar(value=self.volume_placeholder)
         self.max_chars_var = tk.StringVar(value="2600")
         self.retries_var = tk.StringVar(value="3")
         self.retry_delay_var = tk.StringVar(value="1.2")
@@ -165,6 +173,8 @@ class TextToAudioApp:
             }
 
         self.root.configure(bg=palette["root_bg"])
+        self.input_fg_color = palette["input_fg"]
+        self.placeholder_fg_color = palette["placeholder"]
 
         self.style.configure("TFrame", background=palette["root_bg"])
         self.style.configure("TLabel", background=palette["root_bg"], foreground=palette["input_fg"])
@@ -278,6 +288,39 @@ class TextToAudioApp:
                 insertbackground=palette["input_fg"],
                 fg=palette["placeholder"] if use_placeholder else palette["input_fg"],
             )
+        if self.rate_entry is not None:
+            current_value = self.rate_var.get().strip()
+            use_placeholder = current_value == self.rate_placeholder or not current_value
+            self.rate_entry.configure(
+                bg=palette["input_bg"],
+                highlightbackground=palette["border"],
+                highlightcolor=palette["button_bg"],
+                relief="flat",
+                insertbackground=palette["input_fg"],
+                fg=palette["placeholder"] if use_placeholder else palette["input_fg"],
+            )
+        if self.pitch_entry is not None:
+            current_value = self.pitch_var.get().strip()
+            use_placeholder = current_value == self.pitch_placeholder or not current_value
+            self.pitch_entry.configure(
+                bg=palette["input_bg"],
+                highlightbackground=palette["border"],
+                highlightcolor=palette["button_bg"],
+                relief="flat",
+                insertbackground=palette["input_fg"],
+                fg=palette["placeholder"] if use_placeholder else palette["input_fg"],
+            )
+        if self.volume_entry is not None:
+            current_value = self.volume_var.get().strip()
+            use_placeholder = current_value == self.volume_placeholder or not current_value
+            self.volume_entry.configure(
+                bg=palette["input_bg"],
+                highlightbackground=palette["border"],
+                highlightcolor=palette["button_bg"],
+                relief="flat",
+                insertbackground=palette["input_fg"],
+                fg=palette["placeholder"] if use_placeholder else palette["input_fg"],
+            )
 
     def _on_theme_changed(self, _event: tk.Event | None = None) -> None:
         self._apply_theme(self.theme_var.get())
@@ -368,13 +411,13 @@ class TextToAudioApp:
 
         main_row = ttk.Frame(content)
         main_row.pack(fill="both", expand=True)
-        main_row.columnconfigure(0, weight=3)
-        main_row.columnconfigure(1, weight=2)
+        main_row.columnconfigure(0, weight=5)
+        main_row.columnconfigure(1, weight=4)
 
         text_frame = ttk.LabelFrame(main_row, text="Input Text", style="Section.TLabelframe")
         text_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
 
-        self.text_editor = ScrolledText(text_frame, wrap="word", height=13, font=("Segoe UI", 11))
+        self.text_editor = ScrolledText(text_frame, wrap="word", height=11, font=("Segoe UI", 11))
         self.text_editor.pack(fill="both", expand=True, padx=10, pady=(10, 6))
         self.text_editor.bind("<KeyRelease>", lambda _e: self._update_char_count())
 
@@ -462,11 +505,22 @@ class TextToAudioApp:
         voice_settings.columnconfigure(1, weight=1)
 
         ttk.Label(voice_settings, text="Rate").grid(row=0, column=0, sticky="w", padx=10, pady=8)
-        ttk.Entry(voice_settings, textvariable=self.rate_var).grid(row=0, column=1, sticky="ew", padx=10, pady=8)
+        self.rate_entry = tk.Entry(voice_settings, textvariable=self.rate_var, fg="#7a7a7a")
+        self.rate_entry.grid(row=0, column=1, sticky="ew", padx=10, pady=8)
+        self.rate_entry.bind("<FocusIn>", self._on_rate_focus_in)
+        self.rate_entry.bind("<FocusOut>", self._on_rate_focus_out)
+
         ttk.Label(voice_settings, text="Pitch").grid(row=1, column=0, sticky="w", padx=10, pady=8)
-        ttk.Entry(voice_settings, textvariable=self.pitch_var).grid(row=1, column=1, sticky="ew", padx=10, pady=8)
+        self.pitch_entry = tk.Entry(voice_settings, textvariable=self.pitch_var, fg="#7a7a7a")
+        self.pitch_entry.grid(row=1, column=1, sticky="ew", padx=10, pady=8)
+        self.pitch_entry.bind("<FocusIn>", self._on_pitch_focus_in)
+        self.pitch_entry.bind("<FocusOut>", self._on_pitch_focus_out)
+
         ttk.Label(voice_settings, text="Volume").grid(row=2, column=0, sticky="w", padx=10, pady=8)
-        ttk.Entry(voice_settings, textvariable=self.volume_var).grid(row=2, column=1, sticky="ew", padx=10, pady=8)
+        self.volume_entry = tk.Entry(voice_settings, textvariable=self.volume_var, fg="#7a7a7a")
+        self.volume_entry.grid(row=2, column=1, sticky="ew", padx=10, pady=8)
+        self.volume_entry.bind("<FocusIn>", self._on_volume_focus_in)
+        self.volume_entry.bind("<FocusOut>", self._on_volume_focus_out)
 
         stability_settings = ttk.LabelFrame(settings_split, text="Stability", style="Section.TLabelframe")
         stability_settings.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
@@ -490,19 +544,19 @@ class TextToAudioApp:
         if path:
             self.input_file_var.set(path)
             if self.input_file_entry is not None:
-                self.input_file_entry.configure(fg="#111111")
+                self.input_file_entry.configure(fg=self.input_fg_color)
 
     def _on_input_focus_in(self, _event: tk.Event) -> None:
         if self.input_file_var.get().strip() == self.input_placeholder:
             self.input_file_var.set("")
             if self.input_file_entry is not None:
-                self.input_file_entry.configure(fg="#111111")
+                self.input_file_entry.configure(fg=self.input_fg_color)
 
     def _on_input_focus_out(self, _event: tk.Event) -> None:
         if not self.input_file_var.get().strip():
             self.input_file_var.set(self.input_placeholder)
             if self.input_file_entry is not None:
-                self.input_file_entry.configure(fg="#7a7a7a")
+                self.input_file_entry.configure(fg=self.placeholder_fg_color)
 
     def _browse_output_file(self) -> None:
         path = filedialog.asksaveasfilename(
@@ -513,38 +567,74 @@ class TextToAudioApp:
         if path:
             self.output_file_var.set(path)
             if self.output_file_entry is not None:
-                self.output_file_entry.configure(fg="#111111")
+                self.output_file_entry.configure(fg=self.input_fg_color)
 
     def _on_output_focus_in(self, _event: tk.Event) -> None:
         if self.output_file_var.get().strip() == self.output_placeholder:
             self.output_file_var.set("")
             if self.output_file_entry is not None:
-                self.output_file_entry.configure(fg="#111111")
+                self.output_file_entry.configure(fg=self.input_fg_color)
 
     def _on_output_focus_out(self, _event: tk.Event) -> None:
         if not self.output_file_var.get().strip():
             self.output_file_var.set(self.output_placeholder)
             if self.output_file_entry is not None:
-                self.output_file_entry.configure(fg="#7a7a7a")
+                self.output_file_entry.configure(fg=self.placeholder_fg_color)
 
     def _browse_storage_folder(self) -> None:
         path = filedialog.askdirectory(title="Select folder to store generated audio")
         if path:
             self.storage_folder_var.set(path)
             if self.storage_entry is not None:
-                self.storage_entry.configure(fg="#111111")
+                self.storage_entry.configure(fg=self.input_fg_color)
 
     def _on_storage_focus_in(self, _event: tk.Event) -> None:
         if self.storage_folder_var.get().strip() == self.storage_placeholder:
             self.storage_folder_var.set("")
             if self.storage_entry is not None:
-                self.storage_entry.configure(fg="#111111")
+                self.storage_entry.configure(fg=self.input_fg_color)
 
     def _on_storage_focus_out(self, _event: tk.Event) -> None:
         if not self.storage_folder_var.get().strip():
             self.storage_folder_var.set(self.storage_placeholder)
             if self.storage_entry is not None:
-                self.storage_entry.configure(fg="#7a7a7a")
+                self.storage_entry.configure(fg=self.placeholder_fg_color)
+
+    def _on_rate_focus_in(self, _event: tk.Event) -> None:
+        if self.rate_var.get().strip() == self.rate_placeholder:
+            self.rate_var.set("")
+            if self.rate_entry is not None:
+                self.rate_entry.configure(fg=self.input_fg_color)
+
+    def _on_rate_focus_out(self, _event: tk.Event) -> None:
+        if not self.rate_var.get().strip():
+            self.rate_var.set(self.rate_placeholder)
+            if self.rate_entry is not None:
+                self.rate_entry.configure(fg=self.placeholder_fg_color)
+
+    def _on_pitch_focus_in(self, _event: tk.Event) -> None:
+        if self.pitch_var.get().strip() == self.pitch_placeholder:
+            self.pitch_var.set("")
+            if self.pitch_entry is not None:
+                self.pitch_entry.configure(fg=self.input_fg_color)
+
+    def _on_pitch_focus_out(self, _event: tk.Event) -> None:
+        if not self.pitch_var.get().strip():
+            self.pitch_var.set(self.pitch_placeholder)
+            if self.pitch_entry is not None:
+                self.pitch_entry.configure(fg=self.placeholder_fg_color)
+
+    def _on_volume_focus_in(self, _event: tk.Event) -> None:
+        if self.volume_var.get().strip() == self.volume_placeholder:
+            self.volume_var.set("")
+            if self.volume_entry is not None:
+                self.volume_entry.configure(fg=self.input_fg_color)
+
+    def _on_volume_focus_out(self, _event: tk.Event) -> None:
+        if not self.volume_var.get().strip():
+            self.volume_var.set(self.volume_placeholder)
+            if self.volume_entry is not None:
+                self.volume_entry.configure(fg=self.placeholder_fg_color)
 
     def _get_storage_folder_text(self) -> str:
         value = self.storage_folder_var.get().strip()
@@ -555,6 +645,24 @@ class TextToAudioApp:
     def _get_output_file_text(self) -> str:
         value = self.output_file_var.get().strip()
         if value == self.output_placeholder:
+            return ""
+        return value
+
+    def _get_rate_text(self) -> str:
+        value = self.rate_var.get().strip()
+        if value == self.rate_placeholder:
+            return ""
+        return value
+
+    def _get_pitch_text(self) -> str:
+        value = self.pitch_var.get().strip()
+        if value == self.pitch_placeholder:
+            return ""
+        return value
+
+    def _get_volume_text(self) -> str:
+        value = self.volume_var.get().strip()
+        if value == self.volume_placeholder:
             return ""
         return value
 
@@ -644,9 +752,9 @@ class TextToAudioApp:
 
     def _resolve_rate_pitch_volume(self) -> tuple[str, str, str]:
         preset = EMOTION_PRESETS[self.emotion_var.get()]
-        rate = self.rate_var.get().strip() or preset["rate"]
-        pitch = self.pitch_var.get().strip() or preset["pitch"]
-        volume = self.volume_var.get().strip() or preset["volume"]
+        rate = self._get_rate_text() or preset["rate"]
+        pitch = self._get_pitch_text() or preset["pitch"]
+        volume = self._get_volume_text() or preset["volume"]
         return rate, pitch, volume
 
     def _resolve_output_path(self) -> Path:
