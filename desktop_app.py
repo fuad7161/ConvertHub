@@ -46,13 +46,17 @@ class TextToAudioApp:
         self.is_generating = False
         self.generated_files: list[Path] = []
         self.is_paused = False
+        self.input_placeholder = "Select input text file (optional)"
+        self.output_placeholder = "Output file path (optional)"
         self.play_pause_text = tk.StringVar(value="▶ Play")
         self.play_pause_btn: ttk.Button | None = None
         self.storage_placeholder = "Add folder to store audio"
+        self.input_file_entry: tk.Entry | None = None
+        self.output_file_entry: tk.Entry | None = None
         self.storage_entry: tk.Entry | None = None
 
-        self.input_file_var = tk.StringVar(value="input.txt")
-        self.output_file_var = tk.StringVar(value="")
+        self.input_file_var = tk.StringVar(value=self.input_placeholder)
+        self.output_file_var = tk.StringVar(value=self.output_placeholder)
         self.storage_folder_var = tk.StringVar(value=self.storage_placeholder)
         self.theme_var = tk.StringVar(value="System")
         self.voice_var = tk.StringVar(value=DEFAULT_VOICE_LABEL)
@@ -252,6 +256,28 @@ class TextToAudioApp:
                 insertbackground=palette["input_fg"],
                 fg=palette["placeholder"] if use_placeholder else palette["input_fg"],
             )
+        if self.input_file_entry is not None:
+            current_value = self.input_file_var.get().strip()
+            use_placeholder = current_value == self.input_placeholder or not current_value
+            self.input_file_entry.configure(
+                bg=palette["input_bg"],
+                highlightbackground=palette["border"],
+                highlightcolor=palette["button_bg"],
+                relief="flat",
+                insertbackground=palette["input_fg"],
+                fg=palette["placeholder"] if use_placeholder else palette["input_fg"],
+            )
+        if self.output_file_entry is not None:
+            current_value = self.output_file_var.get().strip()
+            use_placeholder = current_value == self.output_placeholder or not current_value
+            self.output_file_entry.configure(
+                bg=palette["input_bg"],
+                highlightbackground=palette["border"],
+                highlightcolor=palette["button_bg"],
+                relief="flat",
+                insertbackground=palette["input_fg"],
+                fg=palette["placeholder"] if use_placeholder else palette["input_fg"],
+            )
 
     def _on_theme_changed(self, _event: tk.Event | None = None) -> None:
         self._apply_theme(self.theme_var.get())
@@ -284,14 +310,25 @@ class TextToAudioApp:
         content = ttk.Frame(create_tab)
         content.pack(fill="both", expand=True, padx=8, pady=8)
 
-        file_frame = ttk.LabelFrame(content, text="File Paths", style="Section.TLabelframe")
-        file_frame.pack(fill="x", pady=(0, 8))
+        top_row = ttk.Frame(content)
+        top_row.pack(fill="x", pady=(0, 8))
+        top_row.columnconfigure(0, weight=3)
+        top_row.columnconfigure(1, weight=2)
+
+        file_frame = ttk.LabelFrame(top_row, text="File Paths", style="Section.TLabelframe")
+        file_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
         ttk.Label(file_frame, text="Input file").grid(row=0, column=0, sticky="w", **pad)
-        ttk.Entry(file_frame, textvariable=self.input_file_var).grid(row=0, column=1, sticky="we", **pad)
+        self.input_file_entry = tk.Entry(file_frame, textvariable=self.input_file_var, fg="#7a7a7a")
+        self.input_file_entry.grid(row=0, column=1, sticky="we", **pad)
+        self.input_file_entry.bind("<FocusIn>", self._on_input_focus_in)
+        self.input_file_entry.bind("<FocusOut>", self._on_input_focus_out)
         ttk.Button(file_frame, text="Browse", command=self._browse_input_file).grid(row=0, column=2, **pad)
 
         ttk.Label(file_frame, text="Output file").grid(row=1, column=0, sticky="w", **pad)
-        ttk.Entry(file_frame, textvariable=self.output_file_var).grid(row=1, column=1, sticky="we", **pad)
+        self.output_file_entry = tk.Entry(file_frame, textvariable=self.output_file_var, fg="#7a7a7a")
+        self.output_file_entry.grid(row=1, column=1, sticky="we", **pad)
+        self.output_file_entry.bind("<FocusIn>", self._on_output_focus_in)
+        self.output_file_entry.bind("<FocusOut>", self._on_output_focus_out)
         ttk.Button(file_frame, text="Browse", command=self._browse_output_file).grid(row=1, column=2, **pad)
 
         ttk.Label(file_frame, text="Storage folder").grid(row=2, column=0, sticky="w", **pad)
@@ -301,6 +338,27 @@ class TextToAudioApp:
         self.storage_entry.bind("<FocusOut>", self._on_storage_focus_out)
         ttk.Button(file_frame, text="Pick Folder", command=self._browse_storage_folder).grid(row=2, column=2, **pad)
         file_frame.columnconfigure(1, weight=1)
+
+        voice_frame = ttk.LabelFrame(top_row, text="Voice & Emotion", style="Section.TLabelframe")
+        voice_frame.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
+        voice_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(voice_frame, text="Voice").grid(row=0, column=0, sticky="w", **pad)
+        ttk.Combobox(
+            voice_frame,
+            textvariable=self.voice_var,
+            values=list(VOICE_OPTIONS.keys()),
+            width=32,
+        ).grid(row=0, column=1, sticky="ew", **pad)
+
+        ttk.Label(voice_frame, text="Emotion").grid(row=1, column=0, sticky="w", **pad)
+        ttk.Combobox(
+            voice_frame,
+            textvariable=self.emotion_var,
+            values=list(EMOTION_PRESETS.keys()),
+            state="readonly",
+            width=18,
+        ).grid(row=1, column=1, sticky="ew", **pad)
 
         main_row = ttk.Frame(content)
         main_row.pack(fill="both", expand=True)
@@ -393,33 +451,16 @@ class TextToAudioApp:
         settings_split.columnconfigure(0, weight=1)
         settings_split.columnconfigure(1, weight=1)
 
-        voice_settings = ttk.LabelFrame(settings_split, text="Voice & Tone", style="Section.TLabelframe")
+        voice_settings = ttk.LabelFrame(settings_split, text="Tone Controls", style="Section.TLabelframe")
         voice_settings.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
         voice_settings.columnconfigure(1, weight=1)
 
-        ttk.Label(voice_settings, text="Voice").grid(row=0, column=0, sticky="w", padx=10, pady=8)
-        ttk.Combobox(
-            voice_settings,
-            textvariable=self.voice_var,
-            values=list(VOICE_OPTIONS.keys()),
-            width=36,
-        ).grid(row=0, column=1, sticky="ew", padx=10, pady=8)
-
-        ttk.Label(voice_settings, text="Emotion preset").grid(row=1, column=0, sticky="w", padx=10, pady=8)
-        ttk.Combobox(
-            voice_settings,
-            textvariable=self.emotion_var,
-            values=list(EMOTION_PRESETS.keys()),
-            state="readonly",
-            width=18,
-        ).grid(row=1, column=1, sticky="ew", padx=10, pady=8)
-
-        ttk.Label(voice_settings, text="Rate").grid(row=2, column=0, sticky="w", padx=10, pady=8)
-        ttk.Entry(voice_settings, textvariable=self.rate_var).grid(row=2, column=1, sticky="ew", padx=10, pady=8)
-        ttk.Label(voice_settings, text="Pitch").grid(row=3, column=0, sticky="w", padx=10, pady=8)
-        ttk.Entry(voice_settings, textvariable=self.pitch_var).grid(row=3, column=1, sticky="ew", padx=10, pady=8)
-        ttk.Label(voice_settings, text="Volume").grid(row=4, column=0, sticky="w", padx=10, pady=8)
-        ttk.Entry(voice_settings, textvariable=self.volume_var).grid(row=4, column=1, sticky="ew", padx=10, pady=8)
+        ttk.Label(voice_settings, text="Rate").grid(row=0, column=0, sticky="w", padx=10, pady=8)
+        ttk.Entry(voice_settings, textvariable=self.rate_var).grid(row=0, column=1, sticky="ew", padx=10, pady=8)
+        ttk.Label(voice_settings, text="Pitch").grid(row=1, column=0, sticky="w", padx=10, pady=8)
+        ttk.Entry(voice_settings, textvariable=self.pitch_var).grid(row=1, column=1, sticky="ew", padx=10, pady=8)
+        ttk.Label(voice_settings, text="Volume").grid(row=2, column=0, sticky="w", padx=10, pady=8)
+        ttk.Entry(voice_settings, textvariable=self.volume_var).grid(row=2, column=1, sticky="ew", padx=10, pady=8)
 
         stability_settings = ttk.LabelFrame(settings_split, text="Stability", style="Section.TLabelframe")
         stability_settings.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
@@ -447,6 +488,20 @@ class TextToAudioApp:
         path = filedialog.askopenfilename(title="Select input text file")
         if path:
             self.input_file_var.set(path)
+            if self.input_file_entry is not None:
+                self.input_file_entry.configure(fg="#111111")
+
+    def _on_input_focus_in(self, _event: tk.Event) -> None:
+        if self.input_file_var.get().strip() == self.input_placeholder:
+            self.input_file_var.set("")
+            if self.input_file_entry is not None:
+                self.input_file_entry.configure(fg="#111111")
+
+    def _on_input_focus_out(self, _event: tk.Event) -> None:
+        if not self.input_file_var.get().strip():
+            self.input_file_var.set(self.input_placeholder)
+            if self.input_file_entry is not None:
+                self.input_file_entry.configure(fg="#7a7a7a")
 
     def _browse_output_file(self) -> None:
         path = filedialog.asksaveasfilename(
@@ -456,6 +511,20 @@ class TextToAudioApp:
         )
         if path:
             self.output_file_var.set(path)
+            if self.output_file_entry is not None:
+                self.output_file_entry.configure(fg="#111111")
+
+    def _on_output_focus_in(self, _event: tk.Event) -> None:
+        if self.output_file_var.get().strip() == self.output_placeholder:
+            self.output_file_var.set("")
+            if self.output_file_entry is not None:
+                self.output_file_entry.configure(fg="#111111")
+
+    def _on_output_focus_out(self, _event: tk.Event) -> None:
+        if not self.output_file_var.get().strip():
+            self.output_file_var.set(self.output_placeholder)
+            if self.output_file_entry is not None:
+                self.output_file_entry.configure(fg="#7a7a7a")
 
     def _browse_storage_folder(self) -> None:
         path = filedialog.askdirectory(title="Select folder to store generated audio")
@@ -479,6 +548,12 @@ class TextToAudioApp:
     def _get_storage_folder_text(self) -> str:
         value = self.storage_folder_var.get().strip()
         if value == self.storage_placeholder:
+            return ""
+        return value
+
+    def _get_output_file_text(self) -> str:
+        value = self.output_file_var.get().strip()
+        if value == self.output_placeholder:
             return ""
         return value
 
@@ -574,7 +649,7 @@ class TextToAudioApp:
         return rate, pitch, volume
 
     def _resolve_output_path(self) -> Path:
-        output_text = self.output_file_var.get().strip()
+        output_text = self._get_output_file_text()
         storage_folder_text = self._get_storage_folder_text()
         timestamp = datetime.now().strftime("%Y-%m-%d:%H-%M-%S-%f")
         default_name = f"tts_{timestamp}.mp3"
