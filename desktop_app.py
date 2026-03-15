@@ -360,6 +360,12 @@ class TextToAudioApp:
             width=18,
         ).grid(row=1, column=1, sticky="ew", **pad)
 
+        ttk.Checkbutton(
+            voice_frame,
+            text="Auto-detect expression",
+            variable=self.auto_expression_var,
+        ).grid(row=2, column=0, columnspan=2, sticky="w", padx=10, pady=(4, 8))
+
         main_row = ttk.Frame(content)
         main_row.pack(fill="both", expand=True)
         main_row.columnconfigure(0, weight=3)
@@ -472,11 +478,6 @@ class TextToAudioApp:
         ttk.Entry(stability_settings, textvariable=self.retries_var).grid(row=1, column=1, sticky="ew", padx=10, pady=8)
         ttk.Label(stability_settings, text="Retry delay (s)").grid(row=2, column=0, sticky="w", padx=10, pady=8)
         ttk.Entry(stability_settings, textvariable=self.retry_delay_var).grid(row=2, column=1, sticky="ew", padx=10, pady=8)
-        ttk.Checkbutton(
-            stability_settings,
-            text="Auto-detect expression",
-            variable=self.auto_expression_var,
-        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=10, pady=(4, 10))
 
         status_bar = ttk.Frame(self.root)
         status_bar.pack(fill="x", padx=12, pady=(0, 10))
