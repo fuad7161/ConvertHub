@@ -289,7 +289,6 @@ class TextToAudioApp:
         ttk.Label(file_frame, text="Input file").grid(row=0, column=0, sticky="w", **pad)
         ttk.Entry(file_frame, textvariable=self.input_file_var).grid(row=0, column=1, sticky="we", **pad)
         ttk.Button(file_frame, text="Browse", command=self._browse_input_file).grid(row=0, column=2, **pad)
-        ttk.Button(file_frame, text="Load", command=self._load_input_file).grid(row=0, column=3, **pad)
 
         ttk.Label(file_frame, text="Output file").grid(row=1, column=0, sticky="w", **pad)
         ttk.Entry(file_frame, textvariable=self.output_file_var).grid(row=1, column=1, sticky="we", **pad)
@@ -482,17 +481,6 @@ class TextToAudioApp:
         if value == self.storage_placeholder:
             return ""
         return value
-
-    def _load_input_file(self) -> None:
-        path = Path(self.input_file_var.get().strip())
-        if not path.exists():
-            messagebox.showerror("Input file not found", f"File does not exist:\n{path}")
-            return
-
-        text = path.read_text(encoding="utf-8")
-        self.text_editor.delete("1.0", tk.END)
-        self.text_editor.insert("1.0", text)
-        self.status_var.set(f"Loaded: {path}")
 
     def _clear_text(self) -> None:
         self.text_editor.delete("1.0", tk.END)
