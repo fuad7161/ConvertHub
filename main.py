@@ -11,6 +11,8 @@ Examples:
 	python main.py --input-file input.txt
 	python main.py --voice en-US-ChristopherNeural --output narration.mp3
 	python main.py --emotion cheerful
+	python main.py  # with inline tags: [cheerful] text [calm] text [rate=-6% pitch=-8Hz]
+	python main.py  # plain text supported: emotion is auto-detected per sentence
 """
 
 import argparse
@@ -27,10 +29,28 @@ DEFAULT_VOICE = "en-US-ChristopherNeural"
 
 EMOTION_PRESETS = {
 	"neutral": {"rate": "+0%", "pitch": "+0Hz", "volume": "+0%"},
-	"cheerful": {"rate": "+8%", "pitch": "+30Hz", "volume": "+2%"},
-	"calm": {"rate": "-8%", "pitch": "-12Hz", "volume": "+0%"},
-	"sad": {"rate": "-14%", "pitch": "-35Hz", "volume": "-2%"},
-	"energetic": {"rate": "+12%", "pitch": "+20Hz", "volume": "+4%"},
+	"cheerful": {"rate": "+8%", "pitch": "+0Hz", "volume": "+2%"},
+	"calm": {"rate": "-8%", "pitch": "+0Hz", "volume": "+0%"},
+	"sad": {"rate": "-14%", "pitch": "+0Hz", "volume": "-2%"},
+	"energetic": {"rate": "+12%", "pitch": "+0Hz", "volume": "+4%"},
+}
+
+EXPRESSION_PATTERN = re.compile(r"\[([^\[\]]+)\]")
+POSITIVE_WORDS = {
+	"great", "awesome", "amazing", "good", "love", "happy", "excellent",
+	"fun", "nice", "wonderful", "fantastic", "brilliant", "yay", "yess",
+}
+NEGATIVE_WORDS = {
+	"sad", "bad", "terrible", "awful", "hate", "angry", "upset", "bummed",
+	"failed", "failure", "problem", "worst", "pain", "crappy", "bombed",
+}
+ENERGETIC_WORDS = {
+	"wow", "yess", "let's go", "lets go", "super", "instantly", "incredible",
+	"boom", "excited", "hype", "powerful",
+}
+CALM_WORDS = {
+	"calm", "slowly", "gently", "steady", "softly", "relaxed", "breathe",
+	"peaceful", "quiet", "still",
 }
 
 
@@ -107,6 +127,14 @@ def parse_args() -> argparse.Namespace:
 		default=1.2,
 		help="Base retry delay in seconds; uses exponential backoff (default: 1.2)",
 	)
+	parser.add_argument(
+		"--disable-auto-expression",
+		action="store_true",
+		help=(
+			"Disable automatic emotion detection for plain text (only manual --emotion "
+			"or [expression] tags will be used)"
+		),
+	)
 
 	argv = normalize_cli_value_flags(sys.argv[1:])
 	return parser.parse_args(argv)
@@ -176,6 +204,165 @@ def resolve_voice_settings(args: argparse.Namespace) -> tuple[str, str, str]:
 	pitch = args.pitch if args.pitch is not None else preset["pitch"]
 	volume = args.volume if args.volume is not None else preset["volume"]
 	return rate, pitch, volume
+
+
+def parse_expression_directive(
+	directive: str,
+	current: dict[str, str],
+) -> dict[str, str]:
+	"""Parse one [expression] directive and return updated voice settings."""
+	normalized = directive.strip()
+	lower_directive = normalized.lower()
+
+	if lower_directive in EMOTION_PRESETS:
+		return dict(EMOTION_PRESETS[lower_directive])
+
+	updated = dict(current)
+	parts = re.split(r"[,\s]+", normalized)
+	for part in parts:
+		if not part or "=" not in part:
+			continue
+		key, value = part.split("=", 1)
+		key = key.strip().lower()
+		value = value.strip()
+		if key in {"rate", "pitch", "volume"} and value:
+			updated[key] = value
+
+	return updated
+
+
+def parse_text_with_expressions(
+	text: str,
+	default_rate: str,
+	default_pitch: str,
+	default_volume: str,
+	auto_detect_expressions: bool,
+) -> list[tuple[str, str, str, str]]:
+	"""Split text into styled segments using inline tags.
+
+	Supported examples inside input text:
+	- [cheerful]
+	- [calm]
+	- [sad]
+	- [energetic]
+	- [neutral]
+	- [rate=-6%]
+	- [pitch=-10Hz]
+	- [volume=+2%]
+	- [rate=-4% pitch=-8Hz volume=+1%]
+	"""
+	if auto_detect_expressions and not EXPRESSION_PATTERN.search(text):
+		return parse_text_with_auto_expressions(
+			text=text,
+			default_rate=default_rate,
+			default_pitch=default_pitch,
+			default_volume=default_volume,
+		)
+
+	base_settings = {
+		"rate": default_rate,
+		"pitch": default_pitch,
+		"volume": default_volume,
+	}
+	current_settings = dict(base_settings)
+
+	segments: list[tuple[str, str, str, str]] = []
+	last_index = 0
+
+	for match in EXPRESSION_PATTERN.finditer(text):
+		segment_text = text[last_index:match.start()].strip()
+		if segment_text:
+			segments.append(
+				(
+					segment_text,
+					current_settings["rate"],
+					current_settings["pitch"],
+					current_settings["volume"],
+				)
+			)
+
+		directive = match.group(1)
+		current_settings = parse_expression_directive(directive, current_settings)
+		last_index = match.end()
+
+	remainder = text[last_index:].strip()
+	if remainder:
+		segments.append(
+			(
+				remainder,
+				current_settings["rate"],
+				current_settings["pitch"],
+				current_settings["volume"],
+			)
+		)
+
+	if not segments:
+		raise ValueError("No speakable text found after parsing [expression] tags.")
+
+	return segments
+
+
+def detect_emotion_for_sentence(sentence: str) -> str:
+	"""Heuristic emotion detection for plain text sentence."""
+	text = sentence.lower().strip()
+	if not text:
+		return "neutral"
+
+	words = re.findall(r"[a-z']+", text)
+	pos_hits = sum(1 for w in words if w in POSITIVE_WORDS)
+	neg_hits = sum(1 for w in words if w in NEGATIVE_WORDS)
+	energetic_hits = sum(1 for w in words if w in ENERGETIC_WORDS)
+	calm_hits = sum(1 for w in words if w in CALM_WORDS)
+
+	exclamation_count = sentence.count("!")
+	question_count = sentence.count("?")
+	ellipsis_count = sentence.count("...") + sentence.count("…")
+
+	if energetic_hits > 0 or exclamation_count >= 2:
+		return "energetic"
+	if neg_hits > pos_hits and (neg_hits > 0 or ellipsis_count > 0):
+		return "sad"
+	if calm_hits > 0 or ellipsis_count > 0:
+		return "calm"
+	if pos_hits > neg_hits or exclamation_count == 1:
+		return "cheerful"
+	if question_count > 0:
+		return "calm"
+	return "neutral"
+
+
+def parse_text_with_auto_expressions(
+	text: str,
+	default_rate: str,
+	default_pitch: str,
+	default_volume: str,
+) -> list[tuple[str, str, str, str]]:
+	"""Auto-detect expression per sentence when no [expression] tags are given."""
+	sentences = re.split(r"(?<=[.!?])\s+", text)
+	segments: list[tuple[str, str, str, str]] = []
+
+	for sentence in sentences:
+		sentence = sentence.strip()
+		if not sentence:
+			continue
+
+		emotion = detect_emotion_for_sentence(sentence)
+		preset = EMOTION_PRESETS.get(emotion, EMOTION_PRESETS["neutral"])
+
+		# Keep timbre consistent: use default pitch unless user explicitly set --pitch.
+		segments.append(
+			(
+				sentence,
+				preset["rate"],
+				default_pitch,
+				preset["volume"],
+			)
+		)
+
+	if not segments:
+		raise ValueError("No speakable text found after automatic expression parsing.")
+
+	return segments
 
 
 def split_text_into_chunks(text: str, max_chars: int) -> list[str]:
@@ -276,6 +463,7 @@ async def text_to_audio(
 	max_chars_per_chunk: int,
 	retries: int,
 	retry_delay: float,
+	auto_detect_expressions: bool,
 ) -> None:
 	output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -286,21 +474,35 @@ async def text_to_audio(
 	if retry_delay <= 0:
 		raise ValueError("--retry-delay must be > 0")
 
-	chunks = split_text_into_chunks(text, max_chars=max_chars_per_chunk)
+	styled_segments = parse_text_with_expressions(
+		text=text,
+		default_rate=rate,
+		default_pitch=pitch,
+		default_volume=volume,
+		auto_detect_expressions=auto_detect_expressions,
+	)
+	total_chunks = 0
+	for segment_text, _, _, _ in styled_segments:
+		total_chunks += len(split_text_into_chunks(segment_text, max_chars=max_chars_per_chunk))
+
+	chunk_counter = 0
 
 	with output_path.open("wb") as out_file:
-		for i, chunk in enumerate(chunks, start=1):
-			audio_bytes = await synthesize_chunk_with_retry(
-				text=chunk,
-				voice=voice,
-				rate=rate,
-				pitch=pitch,
-				volume=volume,
-				retries=retries,
-				retry_delay=retry_delay,
-			)
-			out_file.write(audio_bytes)
-			print(f"Synthesized chunk {i}/{len(chunks)}")
+		for segment_text, seg_rate, seg_pitch, seg_volume in styled_segments:
+			chunks = split_text_into_chunks(segment_text, max_chars=max_chars_per_chunk)
+			for chunk in chunks:
+				chunk_counter += 1
+				audio_bytes = await synthesize_chunk_with_retry(
+					text=chunk,
+					voice=voice,
+					rate=seg_rate,
+					pitch=seg_pitch,
+					volume=seg_volume,
+					retries=retries,
+					retry_delay=retry_delay,
+				)
+				out_file.write(audio_bytes)
+				print(f"Synthesized chunk {chunk_counter}/{total_chunks}")
 
 
 async def main() -> None:
@@ -318,6 +520,7 @@ async def main() -> None:
 		max_chars_per_chunk=args.max_chars_per_chunk,
 		retries=args.retries,
 		retry_delay=args.retry_delay,
+		auto_detect_expressions=not args.disable_auto_expression,
 	)
 	print(f"Audio generated successfully: {output_path}")
 

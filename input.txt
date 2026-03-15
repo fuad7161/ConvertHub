@@ -1,1 +1,6 @@
-I used to spend minutes finding one HTML tag… Now it takes seconds. I built this search feature in my HTML visualizer. Just search the text… and the exact node appears. Super simple right? But here's the fun part. You can edit, add, or delete any tag instantly. Try it yourself at HTML-vision-dot-netlify-dot-app
+Hey, today was actually kind of fun, you know?
+A bunch of the experiments went surprisingly well and I was like yessss, this is it!
+But then… some of them just completely bombed and it honestly bummed me out for a bit.
+Still… every single one — the good and the ugly — ended up teaching me something.
+That’s the thing with science, right? It’s never really just about nailing it… it’s about what you figure out along the way.
+Even the crappy moments somehow sneakily get us closer to understanding stuff.
