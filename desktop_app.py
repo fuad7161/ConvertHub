@@ -839,24 +839,34 @@ class TextToAudioApp:
         storage_folder_text = self._get_storage_folder_text()
         timestamp = datetime.now().strftime("%Y-%m-%d:%H-%M-%S-%f")
         default_name = f"tts_{timestamp}.mp3"
+        storage_folder = Path(storage_folder_text).expanduser() if storage_folder_text else None
 
         if output_text:
             output_candidate = Path(output_text).expanduser()
 
-            # If user provides a folder path, save auto-named file inside that folder.
+            # If user explicitly points to a directory, place auto-named file there.
             if output_candidate.exists() and output_candidate.is_dir():
                 return output_candidate / default_name
             if output_text.endswith(("/", "\\")):
                 return output_candidate / default_name
-            if output_candidate.suffix == "":
-                return output_candidate / default_name
 
-            # Otherwise treat it as an explicit file path.
+            # If user typed a bare name (or name with extension), use it as filename.
+            has_parent = output_candidate.parent != Path(".")
+            filename = output_candidate.name
+            if output_candidate.suffix == "":
+                filename = f"{filename}.mp3"
+
+            if storage_folder is not None and not has_parent and not output_candidate.is_absolute():
+                return storage_folder / filename
+
+            # If they provided a custom path, keep that path and ensure .mp3 extension.
+            if output_candidate.suffix == "":
+                return output_candidate.with_suffix(".mp3")
             return output_candidate
 
-        # If no output file is provided, place file in <selected-folder>/audio.
+        # If no output file is provided, place auto-named file in selected folder.
         if storage_folder_text:
-            return Path(storage_folder_text).expanduser() / "audio" / default_name
+            return Path(storage_folder_text).expanduser() / default_name
 
         # Default fallback: OS Music/audio directory.
         return Path.home() / "Music" / "audio" / default_name
