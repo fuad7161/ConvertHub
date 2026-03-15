@@ -82,7 +82,7 @@ class TextToAudioApp:
         self.generation_progress_var = tk.DoubleVar(value=0.0)
         self.progress_state_var = tk.StringVar(value="Idle")
 
-        self.seek_scale: ttk.Scale | None = None
+        self.seek_scale: tk.Scale | None = None
         self.seek_var = tk.DoubleVar(value=0.0)
         self.seek_time_var = tk.StringVar(value="00:00 / 00:00")
         self.seek_dragging = False
@@ -420,6 +420,15 @@ class TextToAudioApp:
                 insertbackground=palette["input_fg"],
                 fg=palette["placeholder"] if use_placeholder else palette["input_fg"],
             )
+        if self.seek_scale is not None:
+            self.seek_scale.configure(
+                bg=palette["card_bg"],
+                troughcolor=palette["button_secondary_bg"],
+                activebackground=palette["button_active"],
+                highlightbackground=palette["card_bg"],
+                highlightcolor=palette["card_bg"],
+                fg=palette["muted"],
+            )
 
     def _on_theme_changed(self, _event: tk.Event | None = None) -> None:
         self._apply_theme(self.theme_var.get())
@@ -535,7 +544,13 @@ class TextToAudioApp:
         )
         self.generate_btn.pack(fill="x", padx=8, pady=(8, 6))
 
-        play_row = ttk.Frame(action_frame)
+        player_card = ttk.LabelFrame(action_frame, text="Playback", style="Section.TLabelframe")
+        player_card.pack(fill="x", padx=8, pady=(0, 8))
+
+        ttk.Label(player_card, text="Selected audio:", style="Muted.TLabel").pack(anchor="w", padx=8, pady=(8, 0))
+        ttk.Label(player_card, textvariable=self.selected_audio_var, wraplength=250).pack(anchor="w", padx=8, pady=(0, 8))
+
+        play_row = ttk.Frame(player_card)
         play_row.pack(fill="x", padx=8, pady=(0, 8))
         self.play_pause_btn = ttk.Button(
             play_row,
@@ -547,8 +562,23 @@ class TextToAudioApp:
         self.play_pause_btn.pack(side="left")
         ttk.Button(play_row, text="⏹", command=self._on_stop, style="Danger.TButton", width=3).pack(side="left", padx=(6, 0))
 
-        ttk.Label(action_frame, text="Selected audio:", style="Muted.TLabel").pack(anchor="w", padx=8)
-        ttk.Label(action_frame, textvariable=self.selected_audio_var, wraplength=260).pack(anchor="w", padx=8, pady=(0, 8))
+        self.seek_scale = tk.Scale(
+            player_card,
+            from_=0,
+            to=100,
+            orient="horizontal",
+            variable=self.seek_var,
+            showvalue=0,
+            resolution=0.1,
+            sliderlength=18,
+            bd=0,
+            highlightthickness=0,
+            state=tk.DISABLED,
+        )
+        self.seek_scale.pack(fill="x", padx=8, pady=(0, 2))
+        self.seek_scale.bind("<ButtonPress-1>", self._on_seek_press)
+        self.seek_scale.bind("<ButtonRelease-1>", self._on_seek_release)
+        ttk.Label(player_card, textvariable=self.seek_time_var, style="Muted.TLabel").pack(anchor="e", padx=8, pady=(0, 8))
 
         progress_row = ttk.Frame(action_frame)
         progress_row.pack(fill="x", padx=8, pady=(0, 4))
@@ -561,15 +591,6 @@ class TextToAudioApp:
         )
         self.progress.pack(fill="x")
         ttk.Label(action_frame, textvariable=self.progress_state_var, style="Muted.TLabel").pack(anchor="w", padx=8, pady=(0, 8))
-
-        seek_frame = ttk.Frame(action_frame)
-        seek_frame.pack(fill="x", padx=8, pady=(0, 8))
-        self.seek_scale = ttk.Scale(seek_frame, from_=0, to=100, variable=self.seek_var, orient="horizontal")
-        self.seek_scale.pack(fill="x")
-        self.seek_scale.bind("<ButtonPress-1>", self._on_seek_press)
-        self.seek_scale.bind("<ButtonRelease-1>", self._on_seek_release)
-        self.seek_scale.state(["disabled"])
-        ttk.Label(action_frame, textvariable=self.seek_time_var, style="Muted.TLabel").pack(anchor="e", padx=8, pady=(0, 8))
 
         # Player/history tab
         history_frame = ttk.LabelFrame(player_tab, text="Generated Files", style="Section.TLabelframe")
@@ -817,11 +838,11 @@ class TextToAudioApp:
 
         if self.audio_duration_sec > 0:
             self.seek_scale.configure(from_=0, to=self.audio_duration_sec)
-            self.seek_scale.state(["!disabled"])
+            self.seek_scale.configure(state=tk.NORMAL)
             self.seek_var.set(0.0)
             self._set_seek_time_label(0.0)
         else:
-            self.seek_scale.state(["disabled"])
+            self.seek_scale.configure(state=tk.DISABLED)
             self.seek_var.set(0.0)
             self.seek_time_var.set("00:00 / 00:00")
 
