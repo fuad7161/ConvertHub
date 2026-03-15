@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+import shutil
+import subprocess
+import tempfile
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -53,6 +56,8 @@ class TextToAudioApp:
         self.volume_placeholder = "e.g. +2% (optional)"
         self.play_pause_text = tk.StringVar(value="▶ Play")
         self.play_pause_btn: ttk.Button | None = None
+        self.playback_speed_var = tk.StringVar(value="1.0x")
+        self.playback_speed_options = ["0.75x", "1.0x", "1.25x", "1.5x", "2.0x"]
         self.storage_placeholder = "Add folder to store audio"
         self.input_file_entry: tk.Entry | None = None
         self.output_file_entry: tk.Entry | None = None
@@ -90,6 +95,10 @@ class TextToAudioApp:
         self.progress_after_id: str | None = None
         self.audio_duration_sec = 0.0
         self.playback_start_offset_sec = 0.0
+        self.current_playback_speed = 1.0
+        self.current_playback_base_file: Path | None = None
+        self.current_playback_source_file: Path | None = None
+        self._temp_speed_file: Path | None = None
 
         self.player_ready = False
         self.style = ttk.Style(self.root)
@@ -106,6 +115,109 @@ class TextToAudioApp:
             self.player_ready = True
         except Exception:
             self.player_ready = False
+
+    def _parse_speed_value(self) -> float:
+        value = self.playback_speed_var.get().strip().lower().replace("x", "")
+        try:
+            speed = float(value)
+        except ValueError:
+            speed = 1.0
+        return max(0.5, min(2.0, speed))
+
+    def _on_speed_changed(self, _event: tk.Event | None = None) -> None:
+        new_speed = self._parse_speed_value()
+        old_speed = self.current_playback_speed
+        self.current_playback_speed = new_speed
+
+        if self.current_playback_base_file is None or not self.current_playback_base_file.exists():
+            self.status_var.set(f"Speed set to {new_speed:.2f}x")
+            return
+
+        was_active = pygame.mixer.music.get_busy() or self.is_paused
+        current_display_sec = float(self.seek_var.get())
+        content_position_sec = current_display_sec * old_speed
+        new_start_sec = content_position_sec / new_speed if new_speed > 0 else 0.0
+        was_paused = self.is_paused
+
+        try:
+            self.current_playback_source_file = self._build_playback_source(
+                self.current_playback_base_file,
+                new_speed,
+            )
+            self._load_audio_duration(self.current_playback_source_file)
+            if was_active:
+                self._play_from_position(new_start_sec, pause_after_start=was_paused)
+            self.status_var.set(f"Speed set to {new_speed:.2f}x")
+        except Exception as exc:
+            messagebox.showerror("Playback error", str(exc))
+
+    def _cleanup_temp_speed_file(self) -> None:
+        if self._temp_speed_file is not None:
+            try:
+                if self._temp_speed_file.exists():
+                    self._temp_speed_file.unlink()
+            except Exception:
+                pass
+            self._temp_speed_file = None
+
+    def _build_playback_source(self, base_audio_path: Path, speed: float) -> Path:
+        if abs(speed - 1.0) < 1e-6:
+            self._cleanup_temp_speed_file()
+            return base_audio_path
+
+        ffmpeg_path = shutil.which("ffmpeg")
+        if ffmpeg_path is None:
+            raise RuntimeError("ffmpeg is required for variable speed playback. Install ffmpeg first.")
+
+        self._cleanup_temp_speed_file()
+        tmp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+        tmp_path = Path(tmp_file.name)
+        tmp_file.close()
+
+        atempo_filter = f"atempo={speed:.3f}"
+        cmd = [
+            ffmpeg_path,
+            "-y",
+            "-i",
+            str(base_audio_path),
+            "-filter:a",
+            atempo_filter,
+            "-vn",
+            str(tmp_path),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            try:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+            except Exception:
+                pass
+            raise RuntimeError("Unable to apply speed. Ensure ffmpeg supports this audio format.")
+
+        self._temp_speed_file = tmp_path
+        return tmp_path
+
+    def _play_from_position(self, start_sec: float, pause_after_start: bool = False) -> None:
+        if self.current_playback_source_file is None:
+            return
+
+        start_sec = max(0.0, min(start_sec, self.audio_duration_sec if self.audio_duration_sec > 0 else start_sec))
+        pygame.mixer.music.load(str(self.current_playback_source_file))
+        pygame.mixer.music.play(start=start_sec)
+        self.playback_start_offset_sec = start_sec
+
+        if pause_after_start:
+            pygame.mixer.music.pause()
+            self.is_paused = True
+            self.play_pause_text.set("▶ Play")
+            self.status_var.set("Paused")
+        else:
+            self.is_paused = False
+            self.play_pause_text.set("⏸ Pause")
+            self.status_var.set("Playing audio...")
+
+        self._set_seek_time_label(start_sec)
+        self._start_seek_updates()
 
     def _setup_styles(self) -> None:
         try:
@@ -561,6 +673,15 @@ class TextToAudioApp:
         )
         self.play_pause_btn.pack(side="left")
         ttk.Button(play_row, text="⏹", command=self._on_stop, style="Danger.TButton", width=3).pack(side="left", padx=(6, 0))
+        speed_combo = ttk.Combobox(
+            play_row,
+            textvariable=self.playback_speed_var,
+            values=self.playback_speed_options,
+            state="readonly",
+            width=7,
+        )
+        speed_combo.pack(side="left", padx=(10, 0))
+        speed_combo.bind("<<ComboboxSelected>>", self._on_speed_changed)
 
         self.seek_scale = tk.Scale(
             player_card,
@@ -815,7 +936,13 @@ class TextToAudioApp:
     def _set_selected_audio(self, output_path: Path) -> None:
         self.output_file_var.set(str(output_path))
         self.selected_audio_var.set(str(output_path))
-        self._load_audio_duration(output_path)
+        self.current_playback_base_file = output_path
+        self.current_playback_source_file = self._build_playback_source(
+            output_path,
+            self._parse_speed_value(),
+        )
+        self.current_playback_speed = self._parse_speed_value()
+        self._load_audio_duration(self.current_playback_source_file)
 
     def _format_mmss(self, total_seconds: float) -> str:
         total = max(0, int(total_seconds))
@@ -883,27 +1010,14 @@ class TextToAudioApp:
         if not self.player_ready or self.audio_duration_sec <= 0:
             return
 
-        audio_path = Path(self.output_file_var.get().strip())
-        if not audio_path.exists():
+        if self.current_playback_source_file is None or not self.current_playback_source_file.exists():
             return
 
         target_sec = max(0.0, min(self.audio_duration_sec, float(self.seek_var.get())))
         was_paused = self.is_paused
 
         try:
-            pygame.mixer.music.load(str(audio_path))
-            pygame.mixer.music.play(start=target_sec)
-            self.playback_start_offset_sec = target_sec
-            if was_paused:
-                pygame.mixer.music.pause()
-                self.is_paused = True
-                self.play_pause_text.set("▶ Play")
-            else:
-                self.is_paused = False
-                self.play_pause_text.set("⏸ Pause")
-
-            self._set_seek_time_label(target_sec)
-            self._start_seek_updates()
+            self._play_from_position(target_sec, pause_after_start=was_paused)
         except Exception:
             pass
 
@@ -971,8 +1085,7 @@ class TextToAudioApp:
             )
             return
 
-        audio_path = Path(self.output_file_var.get().strip())
-        if not audio_path.exists():
+        if self.current_playback_base_file is None or not self.current_playback_base_file.exists():
             messagebox.showerror("Audio not found", "Generate audio first or select a valid output file.")
             return
 
@@ -993,15 +1106,13 @@ class TextToAudioApp:
                 self._stop_seek_updates()
                 return
 
-            pygame.mixer.music.load(str(audio_path))
-            pygame.mixer.music.play()
-            self.is_paused = False
-            self.playback_start_offset_sec = 0.0
-            self._load_audio_duration(audio_path)
-            self.selected_audio_var.set(str(audio_path))
-            self.status_var.set("Playing audio...")
-            self.play_pause_text.set("⏸ Pause")
-            self._start_seek_updates()
+            self.current_playback_source_file = self._build_playback_source(
+                self.current_playback_base_file,
+                self._parse_speed_value(),
+            )
+            self.current_playback_speed = self._parse_speed_value()
+            self._load_audio_duration(self.current_playback_source_file)
+            self._play_from_position(0.0, pause_after_start=False)
         except Exception as exc:
             messagebox.showerror("Play failed", str(exc))
 
@@ -1159,6 +1270,7 @@ class TextToAudioApp:
     def _on_close(self) -> None:
         try:
             self._stop_seek_updates()
+            self._cleanup_temp_speed_file()
             if self.player_ready:
                 pygame.mixer.music.stop()
                 pygame.mixer.quit()
