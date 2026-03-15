@@ -18,14 +18,6 @@ Generate realistic English speech from text using local Python code + Edge neura
 
 - Python 3.10+ (recommended)
 - Internet connection (Edge neural service is online)
-- For desktop UI on Linux: `python3-tk` system package
-
-Install tkinter (Linux):
-
-```bash
-sudo apt update
-sudo apt install -y python3-tk
-```
 
 ---
 

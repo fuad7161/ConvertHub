@@ -46,6 +46,8 @@ class TextToAudioApp:
         self.is_generating = False
         self.generated_files: list[Path] = []
         self.is_paused = False
+        self.play_pause_text = tk.StringVar(value="▶ Play")
+        self.play_pause_btn: ttk.Button | None = None
         self.storage_placeholder = "Add folder to store audio"
         self.storage_entry: tk.Entry | None = None
 
@@ -278,16 +280,11 @@ class TextToAudioApp:
         notebook.add(help_tab, text="Quick Help")
         notebook.add(settings_tab, text="Settings")
 
-        # Create tab layout (responsive on resize)
-        paned = ttk.Panedwindow(create_tab, orient=tk.HORIZONTAL)
-        paned.pack(fill="both", expand=True, padx=4, pady=4)
+        # Create tab layout (minimal)
+        content = ttk.Frame(create_tab)
+        content.pack(fill="both", expand=True, padx=8, pady=8)
 
-        left_panel = ttk.Frame(paned)
-        right_panel = ttk.Frame(paned)
-        paned.add(left_panel, weight=3)
-        paned.add(right_panel, weight=2)
-
-        file_frame = ttk.LabelFrame(left_panel, text="File Paths", style="Section.TLabelframe")
+        file_frame = ttk.LabelFrame(content, text="File Paths", style="Section.TLabelframe")
         file_frame.pack(fill="x", pady=(0, 8))
         ttk.Label(file_frame, text="Input file").grid(row=0, column=0, sticky="w", **pad)
         ttk.Entry(file_frame, textvariable=self.input_file_var).grid(row=0, column=1, sticky="we", **pad)
@@ -306,8 +303,13 @@ class TextToAudioApp:
         ttk.Button(file_frame, text="Pick Folder", command=self._browse_storage_folder).grid(row=2, column=2, **pad)
         file_frame.columnconfigure(1, weight=1)
 
-        text_frame = ttk.LabelFrame(left_panel, text="Input Text", style="Section.TLabelframe")
-        text_frame.pack(fill="both", expand=True)
+        main_row = ttk.Frame(content)
+        main_row.pack(fill="both", expand=True)
+        main_row.columnconfigure(0, weight=3)
+        main_row.columnconfigure(1, weight=2)
+
+        text_frame = ttk.LabelFrame(main_row, text="Input Text", style="Section.TLabelframe")
+        text_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 8))
 
         self.text_editor = ScrolledText(text_frame, wrap="word", height=13, font=("Segoe UI", 11))
         self.text_editor.pack(fill="both", expand=True, padx=10, pady=(10, 6))
@@ -318,51 +320,8 @@ class TextToAudioApp:
         ttk.Button(editor_actions, text="Clear Text", command=self._clear_text).pack(side="left")
         ttk.Label(editor_actions, textvariable=self.char_count_var, style="Muted.TLabel").pack(side="right")
 
-        voice_frame = ttk.LabelFrame(right_panel, text="Voice & Tone", style="Section.TLabelframe")
-        voice_frame.pack(fill="x", pady=(0, 8))
-        voice_frame.columnconfigure(1, weight=1)
-
-        ttk.Label(voice_frame, text="Voice").grid(row=0, column=0, sticky="w", **pad)
-        ttk.Combobox(
-            voice_frame,
-            textvariable=self.voice_var,
-            values=list(VOICE_OPTIONS.keys()),
-            width=24,
-        ).grid(row=0, column=1, sticky="ew", **pad)
-
-        ttk.Label(voice_frame, text="Emotion preset").grid(row=1, column=0, sticky="w", **pad)
-        ttk.Combobox(
-            voice_frame,
-            textvariable=self.emotion_var,
-            values=list(EMOTION_PRESETS.keys()),
-            width=14,
-            state="readonly",
-        ).grid(row=1, column=1, sticky="ew", **pad)
-
-        ttk.Label(voice_frame, text="Rate").grid(row=2, column=0, sticky="w", **pad)
-        ttk.Entry(voice_frame, textvariable=self.rate_var, width=16).grid(row=2, column=1, sticky="ew", **pad)
-        ttk.Label(voice_frame, text="Pitch").grid(row=3, column=0, sticky="w", **pad)
-        ttk.Entry(voice_frame, textvariable=self.pitch_var, width=16).grid(row=3, column=1, sticky="ew", **pad)
-        ttk.Label(voice_frame, text="Volume").grid(row=4, column=0, sticky="w", **pad)
-        ttk.Entry(voice_frame, textvariable=self.volume_var, width=16).grid(row=4, column=1, sticky="ew", **pad)
-
-        stability_frame = ttk.LabelFrame(right_panel, text="Stability", style="Section.TLabelframe")
-        stability_frame.pack(fill="x", pady=(0, 8))
-        stability_frame.columnconfigure(1, weight=1)
-        ttk.Label(stability_frame, text="Max chars/chunk").grid(row=0, column=0, sticky="w", **pad)
-        ttk.Entry(stability_frame, textvariable=self.max_chars_var, width=12).grid(row=0, column=1, sticky="ew", **pad)
-        ttk.Label(stability_frame, text="Retries").grid(row=1, column=0, sticky="w", **pad)
-        ttk.Entry(stability_frame, textvariable=self.retries_var, width=12).grid(row=1, column=1, sticky="ew", **pad)
-        ttk.Label(stability_frame, text="Retry delay (s)").grid(row=2, column=0, sticky="w", **pad)
-        ttk.Entry(stability_frame, textvariable=self.retry_delay_var, width=12).grid(row=2, column=1, sticky="ew", **pad)
-        ttk.Checkbutton(
-            stability_frame,
-            text="Auto-detect expression",
-            variable=self.auto_expression_var,
-        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=10, pady=(4, 8))
-
-        action_frame = ttk.LabelFrame(right_panel, text="Generate & Play", style="Section.TLabelframe")
-        action_frame.pack(fill="x")
+        action_frame = ttk.LabelFrame(main_row, text="Generate & Play", style="Section.TLabelframe")
+        action_frame.grid(row=0, column=1, sticky="nsew", padx=(8, 0))
         self.generate_btn = ttk.Button(
             action_frame,
             text="⚡ Generate Audio",
@@ -373,12 +332,18 @@ class TextToAudioApp:
 
         play_row = ttk.Frame(action_frame)
         play_row.pack(fill="x", padx=8, pady=(0, 8))
-        ttk.Button(play_row, text="▶", command=self._on_play, style="Icon.TButton", width=3).pack(side="left")
-        ttk.Button(play_row, text="⏸", command=self._on_pause, style="Icon.TButton", width=3).pack(side="left", padx=(6, 0))
+        self.play_pause_btn = ttk.Button(
+            play_row,
+            textvariable=self.play_pause_text,
+            command=self._on_play_pause,
+            style="Icon.TButton",
+            width=9,
+        )
+        self.play_pause_btn.pack(side="left")
         ttk.Button(play_row, text="⏹", command=self._on_stop, style="Icon.TButton", width=3).pack(side="left", padx=(6, 0))
 
         ttk.Label(action_frame, text="Selected audio:", style="Muted.TLabel").pack(anchor="w", padx=8)
-        ttk.Label(action_frame, textvariable=self.selected_audio_var, wraplength=290).pack(anchor="w", padx=8, pady=(0, 8))
+        ttk.Label(action_frame, textvariable=self.selected_audio_var, wraplength=260).pack(anchor="w", padx=8, pady=(0, 8))
 
         self.progress = ttk.Progressbar(action_frame, mode="indeterminate")
         self.progress.pack(fill="x", padx=8, pady=(0, 8))
@@ -423,6 +388,55 @@ class TextToAudioApp:
         )
         theme_combo.grid(row=0, column=1, sticky="w", padx=10, pady=10)
         theme_combo.bind("<<ComboboxSelected>>", self._on_theme_changed)
+
+        settings_split = ttk.Frame(settings_tab)
+        settings_split.pack(fill="both", expand=True, padx=10, pady=(0, 10))
+        settings_split.columnconfigure(0, weight=1)
+        settings_split.columnconfigure(1, weight=1)
+
+        voice_settings = ttk.LabelFrame(settings_split, text="Voice & Tone", style="Section.TLabelframe")
+        voice_settings.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
+        voice_settings.columnconfigure(1, weight=1)
+
+        ttk.Label(voice_settings, text="Voice").grid(row=0, column=0, sticky="w", padx=10, pady=8)
+        ttk.Combobox(
+            voice_settings,
+            textvariable=self.voice_var,
+            values=list(VOICE_OPTIONS.keys()),
+            width=36,
+        ).grid(row=0, column=1, sticky="ew", padx=10, pady=8)
+
+        ttk.Label(voice_settings, text="Emotion preset").grid(row=1, column=0, sticky="w", padx=10, pady=8)
+        ttk.Combobox(
+            voice_settings,
+            textvariable=self.emotion_var,
+            values=list(EMOTION_PRESETS.keys()),
+            state="readonly",
+            width=18,
+        ).grid(row=1, column=1, sticky="ew", padx=10, pady=8)
+
+        ttk.Label(voice_settings, text="Rate").grid(row=2, column=0, sticky="w", padx=10, pady=8)
+        ttk.Entry(voice_settings, textvariable=self.rate_var).grid(row=2, column=1, sticky="ew", padx=10, pady=8)
+        ttk.Label(voice_settings, text="Pitch").grid(row=3, column=0, sticky="w", padx=10, pady=8)
+        ttk.Entry(voice_settings, textvariable=self.pitch_var).grid(row=3, column=1, sticky="ew", padx=10, pady=8)
+        ttk.Label(voice_settings, text="Volume").grid(row=4, column=0, sticky="w", padx=10, pady=8)
+        ttk.Entry(voice_settings, textvariable=self.volume_var).grid(row=4, column=1, sticky="ew", padx=10, pady=8)
+
+        stability_settings = ttk.LabelFrame(settings_split, text="Stability", style="Section.TLabelframe")
+        stability_settings.grid(row=0, column=1, sticky="nsew", padx=(6, 0))
+        stability_settings.columnconfigure(1, weight=1)
+
+        ttk.Label(stability_settings, text="Max chars/chunk").grid(row=0, column=0, sticky="w", padx=10, pady=8)
+        ttk.Entry(stability_settings, textvariable=self.max_chars_var).grid(row=0, column=1, sticky="ew", padx=10, pady=8)
+        ttk.Label(stability_settings, text="Retries").grid(row=1, column=0, sticky="w", padx=10, pady=8)
+        ttk.Entry(stability_settings, textvariable=self.retries_var).grid(row=1, column=1, sticky="ew", padx=10, pady=8)
+        ttk.Label(stability_settings, text="Retry delay (s)").grid(row=2, column=0, sticky="w", padx=10, pady=8)
+        ttk.Entry(stability_settings, textvariable=self.retry_delay_var).grid(row=2, column=1, sticky="ew", padx=10, pady=8)
+        ttk.Checkbutton(
+            stability_settings,
+            text="Auto-detect expression",
+            variable=self.auto_expression_var,
+        ).grid(row=3, column=0, columnspan=2, sticky="w", padx=10, pady=(4, 10))
 
         status_bar = ttk.Frame(self.root)
         status_bar.pack(fill="x", padx=12, pady=(0, 10))
@@ -518,9 +532,9 @@ class TextToAudioApp:
             messagebox.showinfo("No selection", "Select an audio file from history.")
             return
         self._set_selected_audio(path)
-        self._on_play()
+        self._on_play_pause()
 
-    def _on_play(self) -> None:
+    def _on_play_pause(self) -> None:
         if not self.player_ready:
             messagebox.showerror(
                 "Audio player unavailable",
@@ -538,6 +552,14 @@ class TextToAudioApp:
                 pygame.mixer.music.unpause()
                 self.is_paused = False
                 self.status_var.set("Resumed audio...")
+                self.play_pause_text.set("⏸ Pause")
+                return
+
+            if pygame.mixer.music.get_busy() and not self.is_paused:
+                pygame.mixer.music.pause()
+                self.is_paused = True
+                self.status_var.set("Paused")
+                self.play_pause_text.set("▶ Play")
                 return
 
             pygame.mixer.music.load(str(audio_path))
@@ -545,20 +567,16 @@ class TextToAudioApp:
             self.is_paused = False
             self.selected_audio_var.set(str(audio_path))
             self.status_var.set("Playing audio...")
+            self.play_pause_text.set("⏸ Pause")
         except Exception as exc:
             messagebox.showerror("Play failed", str(exc))
-
-    def _on_pause(self) -> None:
-        if self.player_ready and pygame.mixer.music.get_busy():
-            pygame.mixer.music.pause()
-            self.is_paused = True
-            self.status_var.set("Paused")
 
     def _on_stop(self) -> None:
         if self.player_ready:
             pygame.mixer.music.stop()
             self.is_paused = False
             self.status_var.set("Playback stopped")
+            self.play_pause_text.set("▶ Play")
 
     def _resolve_rate_pitch_volume(self) -> tuple[str, str, str]:
         preset = EMOTION_PRESETS[self.emotion_var.get()]
@@ -680,6 +698,7 @@ class TextToAudioApp:
         self._set_selected_audio(output_path)
         self._add_to_history(output_path)
         self.status_var.set(f"Done: {output_path}")
+        self.play_pause_text.set("▶ Play")
         messagebox.showinfo("Success", f"Audio generated:\n{output_path}")
 
     def _on_generate_error(self, error_text: str) -> None:
