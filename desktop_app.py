@@ -79,6 +79,17 @@ class TextToAudioApp:
         self.selected_audio_var = tk.StringVar(value="No audio selected")
         self.char_count_var = tk.StringVar(value="Characters: 0")
         self.status_var = tk.StringVar(value="Ready")
+        self.generation_progress_var = tk.DoubleVar(value=0.0)
+        self.progress_state_var = tk.StringVar(value="Idle")
+
+        self.seek_scale: ttk.Scale | None = None
+        self.seek_var = tk.DoubleVar(value=0.0)
+        self.seek_time_var = tk.StringVar(value="00:00 / 00:00")
+        self.seek_dragging = False
+        self.seek_after_id: str | None = None
+        self.progress_after_id: str | None = None
+        self.audio_duration_sec = 0.0
+        self.playback_start_offset_sec = 0.0
 
         self.player_ready = False
         self.style = ttk.Style(self.root)
@@ -108,6 +119,7 @@ class TextToAudioApp:
         self.style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"), padding=(10, 6))
         self.style.configure("Secondary.TButton", font=("Segoe UI", 10), padding=(10, 6))
         self.style.configure("Danger.TButton", font=("Segoe UI", 10, "bold"), padding=(10, 6))
+        self.style.configure("Generate.Horizontal.TProgressbar", thickness=11)
 
     def _detect_system_prefers_dark(self) -> bool:
         gtk_theme = os.environ.get("GTK_THEME", "").lower()
@@ -313,6 +325,16 @@ class TextToAudioApp:
             "Icon.TButton",
             background=[("pressed", palette["button_secondary_pressed"]), ("active", palette["button_secondary_active"])],
             relief=[("pressed", "sunken"), ("!pressed", "raised")],
+        )
+
+        self.style.configure(
+            "Generate.Horizontal.TProgressbar",
+            background=palette["button_bg"],
+            troughcolor=palette["card_bg"],
+            bordercolor=palette["border"],
+            lightcolor=palette["button_active"],
+            darkcolor=palette["button_bg"],
+            thickness=11,
         )
 
         # Update tk widgets after they are created
@@ -528,8 +550,26 @@ class TextToAudioApp:
         ttk.Label(action_frame, text="Selected audio:", style="Muted.TLabel").pack(anchor="w", padx=8)
         ttk.Label(action_frame, textvariable=self.selected_audio_var, wraplength=260).pack(anchor="w", padx=8, pady=(0, 8))
 
-        self.progress = ttk.Progressbar(action_frame, mode="indeterminate")
-        self.progress.pack(fill="x", padx=8, pady=(0, 8))
+        progress_row = ttk.Frame(action_frame)
+        progress_row.pack(fill="x", padx=8, pady=(0, 4))
+        self.progress = ttk.Progressbar(
+            progress_row,
+            mode="determinate",
+            maximum=100,
+            variable=self.generation_progress_var,
+            style="Generate.Horizontal.TProgressbar",
+        )
+        self.progress.pack(fill="x")
+        ttk.Label(action_frame, textvariable=self.progress_state_var, style="Muted.TLabel").pack(anchor="w", padx=8, pady=(0, 8))
+
+        seek_frame = ttk.Frame(action_frame)
+        seek_frame.pack(fill="x", padx=8, pady=(0, 8))
+        self.seek_scale = ttk.Scale(seek_frame, from_=0, to=100, variable=self.seek_var, orient="horizontal")
+        self.seek_scale.pack(fill="x")
+        self.seek_scale.bind("<ButtonPress-1>", self._on_seek_press)
+        self.seek_scale.bind("<ButtonRelease-1>", self._on_seek_release)
+        self.seek_scale.state(["disabled"])
+        ttk.Label(action_frame, textvariable=self.seek_time_var, style="Muted.TLabel").pack(anchor="e", padx=8, pady=(0, 8))
 
         # Player/history tab
         history_frame = ttk.LabelFrame(player_tab, text="Generated Files", style="Section.TLabelframe")
@@ -754,6 +794,125 @@ class TextToAudioApp:
     def _set_selected_audio(self, output_path: Path) -> None:
         self.output_file_var.set(str(output_path))
         self.selected_audio_var.set(str(output_path))
+        self._load_audio_duration(output_path)
+
+    def _format_mmss(self, total_seconds: float) -> str:
+        total = max(0, int(total_seconds))
+        minutes, seconds = divmod(total, 60)
+        return f"{minutes:02d}:{seconds:02d}"
+
+    def _set_seek_time_label(self, current_sec: float) -> None:
+        self.seek_time_var.set(
+            f"{self._format_mmss(current_sec)} / {self._format_mmss(self.audio_duration_sec)}"
+        )
+
+    def _load_audio_duration(self, audio_path: Path) -> None:
+        try:
+            self.audio_duration_sec = float(pygame.mixer.Sound(str(audio_path)).get_length())
+        except Exception:
+            self.audio_duration_sec = 0.0
+
+        if self.seek_scale is None:
+            return
+
+        if self.audio_duration_sec > 0:
+            self.seek_scale.configure(from_=0, to=self.audio_duration_sec)
+            self.seek_scale.state(["!disabled"])
+            self.seek_var.set(0.0)
+            self._set_seek_time_label(0.0)
+        else:
+            self.seek_scale.state(["disabled"])
+            self.seek_var.set(0.0)
+            self.seek_time_var.set("00:00 / 00:00")
+
+    def _start_generation_progress(self) -> None:
+        self.generation_progress_var.set(0.0)
+        self.progress_state_var.set("Preparing synthesis...")
+        if self.progress_after_id is not None:
+            self.root.after_cancel(self.progress_after_id)
+        self.progress_after_id = self.root.after(120, self._tick_generation_progress)
+
+    def _tick_generation_progress(self) -> None:
+        if not self.is_generating:
+            return
+
+        current = self.generation_progress_var.get()
+        next_value = 92.0 if current >= 92.0 else min(92.0, current + (1.4 if current < 70 else 0.5))
+        self.generation_progress_var.set(next_value)
+        self.progress_state_var.set(f"Generating audio... {int(next_value)}%")
+        self.progress_after_id = self.root.after(140, self._tick_generation_progress)
+
+    def _finish_generation_progress(self, success: bool) -> None:
+        if self.progress_after_id is not None:
+            self.root.after_cancel(self.progress_after_id)
+            self.progress_after_id = None
+        if success:
+            self.generation_progress_var.set(100.0)
+            self.progress_state_var.set("Generation completed")
+        else:
+            self.generation_progress_var.set(0.0)
+            self.progress_state_var.set("Generation failed")
+
+    def _on_seek_press(self, _event: tk.Event) -> None:
+        self.seek_dragging = True
+
+    def _on_seek_release(self, _event: tk.Event) -> None:
+        self.seek_dragging = False
+
+        if not self.player_ready or self.audio_duration_sec <= 0:
+            return
+
+        audio_path = Path(self.output_file_var.get().strip())
+        if not audio_path.exists():
+            return
+
+        target_sec = max(0.0, min(self.audio_duration_sec, float(self.seek_var.get())))
+        was_paused = self.is_paused
+
+        try:
+            pygame.mixer.music.load(str(audio_path))
+            pygame.mixer.music.play(start=target_sec)
+            self.playback_start_offset_sec = target_sec
+            if was_paused:
+                pygame.mixer.music.pause()
+                self.is_paused = True
+                self.play_pause_text.set("▶ Play")
+            else:
+                self.is_paused = False
+                self.play_pause_text.set("⏸ Pause")
+
+            self._set_seek_time_label(target_sec)
+            self._start_seek_updates()
+        except Exception:
+            pass
+
+    def _start_seek_updates(self) -> None:
+        if self.seek_after_id is not None:
+            self.root.after_cancel(self.seek_after_id)
+        self.seek_after_id = self.root.after(200, self._update_seekbar)
+
+    def _stop_seek_updates(self) -> None:
+        if self.seek_after_id is not None:
+            self.root.after_cancel(self.seek_after_id)
+            self.seek_after_id = None
+
+    def _update_seekbar(self) -> None:
+        if not self.player_ready or self.seek_scale is None:
+            return
+
+        if not self.seek_dragging and self.audio_duration_sec > 0:
+            pos_ms = pygame.mixer.music.get_pos()
+            if pos_ms >= 0:
+                current_sec = self.playback_start_offset_sec + (pos_ms / 1000.0)
+                if current_sec > self.audio_duration_sec:
+                    current_sec = self.audio_duration_sec
+                self.seek_var.set(current_sec)
+                self._set_seek_time_label(current_sec)
+
+        if pygame.mixer.music.get_busy() or self.is_paused:
+            self.seek_after_id = self.root.after(200, self._update_seekbar)
+        else:
+            self.play_pause_text.set("▶ Play")
 
     def _add_to_history(self, output_path: Path) -> None:
         if output_path not in self.generated_files:
@@ -802,6 +961,7 @@ class TextToAudioApp:
                 self.is_paused = False
                 self.status_var.set("Resumed audio...")
                 self.play_pause_text.set("⏸ Pause")
+                self._start_seek_updates()
                 return
 
             if pygame.mixer.music.get_busy() and not self.is_paused:
@@ -809,14 +969,18 @@ class TextToAudioApp:
                 self.is_paused = True
                 self.status_var.set("Paused")
                 self.play_pause_text.set("▶ Play")
+                self._stop_seek_updates()
                 return
 
             pygame.mixer.music.load(str(audio_path))
             pygame.mixer.music.play()
             self.is_paused = False
+            self.playback_start_offset_sec = 0.0
+            self._load_audio_duration(audio_path)
             self.selected_audio_var.set(str(audio_path))
             self.status_var.set("Playing audio...")
             self.play_pause_text.set("⏸ Pause")
+            self._start_seek_updates()
         except Exception as exc:
             messagebox.showerror("Play failed", str(exc))
 
@@ -824,6 +988,10 @@ class TextToAudioApp:
         if self.player_ready:
             pygame.mixer.music.stop()
             self.is_paused = False
+            self.playback_start_offset_sec = 0.0
+            self._stop_seek_updates()
+            self.seek_var.set(0.0)
+            self._set_seek_time_label(0.0)
             self.status_var.set("Playback stopped")
             self.play_pause_text.set("▶ Play")
 
@@ -898,7 +1066,7 @@ class TextToAudioApp:
         self.is_generating = True
         self.generate_btn.config(state=tk.DISABLED)
         self.status_var.set("Generating audio...")
-        self.progress.start(8)
+        self._start_generation_progress()
 
         thread = threading.Thread(
             target=self._generate_worker,
@@ -953,7 +1121,7 @@ class TextToAudioApp:
     def _on_generate_success(self, output_path: Path) -> None:
         self.is_generating = False
         self.generate_btn.config(state=tk.NORMAL)
-        self.progress.stop()
+        self._finish_generation_progress(success=True)
         self._set_selected_audio(output_path)
         self._add_to_history(output_path)
         self.status_var.set(f"Done: {output_path}")
@@ -963,12 +1131,13 @@ class TextToAudioApp:
     def _on_generate_error(self, error_text: str) -> None:
         self.is_generating = False
         self.generate_btn.config(state=tk.NORMAL)
-        self.progress.stop()
+        self._finish_generation_progress(success=False)
         self.status_var.set("Failed")
         messagebox.showerror("Generation failed", error_text)
 
     def _on_close(self) -> None:
         try:
+            self._stop_seek_updates()
             if self.player_ready:
                 pygame.mixer.music.stop()
                 pygame.mixer.quit()
