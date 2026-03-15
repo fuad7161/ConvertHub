@@ -194,7 +194,7 @@ def get_output_path(args: argparse.Namespace) -> Path:
 	if args.output is not None:
 		return args.output
 
-	timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+	timestamp = datetime.now().strftime("%Y-%m-%d:%H-%M-%S-%f")
 	return Path("audio") / f"tts_{timestamp}.mp3"
 
 
