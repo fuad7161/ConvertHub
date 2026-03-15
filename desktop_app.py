@@ -105,6 +105,9 @@ class TextToAudioApp:
         self.style.configure("Section.TLabelframe", padding=10)
         self.style.configure("Generate.TButton", font=("Segoe UI", 11, "bold"), padding=(14, 8))
         self.style.configure("Icon.TButton", font=("Segoe UI Symbol", 13, "bold"), padding=(8, 4))
+        self.style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"), padding=(10, 6))
+        self.style.configure("Secondary.TButton", font=("Segoe UI", 10), padding=(10, 6))
+        self.style.configure("Danger.TButton", font=("Segoe UI", 10, "bold"), padding=(10, 6))
 
     def _detect_system_prefers_dark(self) -> bool:
         gtk_theme = os.environ.get("GTK_THEME", "").lower()
@@ -145,6 +148,15 @@ class TextToAudioApp:
                 "button_bg": "#3b82f6",
                 "button_active": "#2563eb",
                 "button_fg": "#f8fbff",
+                "button_pressed": "#1d4ed8",
+                "button_secondary_bg": "#1f2a44",
+                "button_secondary_active": "#2a3654",
+                "button_secondary_pressed": "#172036",
+                "button_secondary_fg": "#e6eeff",
+                "button_danger_bg": "#ef4444",
+                "button_danger_active": "#dc2626",
+                "button_danger_pressed": "#b91c1c",
+                "button_danger_fg": "#fff7f7",
                 "tab_bg": "#141d31",
                 "tab_selected": "#1f2a44",
                 "tab_fg": "#c8d4f2",
@@ -165,6 +177,15 @@ class TextToAudioApp:
                 "button_bg": "#2f6feb",
                 "button_active": "#2559bb",
                 "button_fg": "#ffffff",
+                "button_pressed": "#1f4ea8",
+                "button_secondary_bg": "#e7eefc",
+                "button_secondary_active": "#dbe7ff",
+                "button_secondary_pressed": "#c9dcff",
+                "button_secondary_fg": "#193b73",
+                "button_danger_bg": "#ef4444",
+                "button_danger_active": "#dc2626",
+                "button_danger_pressed": "#b91c1c",
+                "button_danger_fg": "#ffffff",
                 "tab_bg": "#dde8fb",
                 "tab_selected": "#ffffff",
                 "tab_fg": "#234070",
@@ -233,10 +254,66 @@ class TextToAudioApp:
         self.style.configure("Section.TLabelframe", background=palette["root_bg"], borderwidth=1, relief="solid", bordercolor=palette["border"])
         self.style.configure("Section.TLabelframe.Label", font=("Segoe UI", 10, "bold"), foreground=palette["title"], background=palette["root_bg"])
         self.style.configure("Muted.TLabel", foreground=palette["muted"], background=palette["root_bg"])
-        self.style.configure("Generate.TButton", foreground=palette["button_fg"], background=palette["button_bg"], bordercolor=palette["button_bg"])
-        self.style.map("Generate.TButton", background=[("active", palette["button_active"])])
-        self.style.configure("Icon.TButton", foreground=palette["input_fg"], background=palette["card_bg"], bordercolor=palette["border"])
-        self.style.map("Icon.TButton", background=[("active", palette["tab_selected"])])
+        self.style.configure(
+            "Generate.TButton",
+            foreground=palette["button_fg"],
+            background=palette["button_bg"],
+            bordercolor=palette["button_bg"],
+        )
+        self.style.map(
+            "Generate.TButton",
+            background=[("pressed", palette["button_pressed"]), ("active", palette["button_active"])],
+            foreground=[("disabled", "#c6d1e8")],
+            relief=[("pressed", "sunken"), ("!pressed", "raised")],
+        )
+
+        self.style.configure(
+            "Primary.TButton",
+            foreground=palette["button_fg"],
+            background=palette["button_bg"],
+            bordercolor=palette["button_bg"],
+        )
+        self.style.map(
+            "Primary.TButton",
+            background=[("pressed", palette["button_pressed"]), ("active", palette["button_active"])],
+            relief=[("pressed", "sunken"), ("!pressed", "raised")],
+        )
+
+        self.style.configure(
+            "Secondary.TButton",
+            foreground=palette["button_secondary_fg"],
+            background=palette["button_secondary_bg"],
+            bordercolor=palette["border"],
+        )
+        self.style.map(
+            "Secondary.TButton",
+            background=[("pressed", palette["button_secondary_pressed"]), ("active", palette["button_secondary_active"])],
+            relief=[("pressed", "sunken"), ("!pressed", "raised")],
+        )
+
+        self.style.configure(
+            "Danger.TButton",
+            foreground=palette["button_danger_fg"],
+            background=palette["button_danger_bg"],
+            bordercolor=palette["button_danger_bg"],
+        )
+        self.style.map(
+            "Danger.TButton",
+            background=[("pressed", palette["button_danger_pressed"]), ("active", palette["button_danger_active"])],
+            relief=[("pressed", "sunken"), ("!pressed", "raised")],
+        )
+
+        self.style.configure(
+            "Icon.TButton",
+            foreground=palette["button_secondary_fg"],
+            background=palette["button_secondary_bg"],
+            bordercolor=palette["border"],
+        )
+        self.style.map(
+            "Icon.TButton",
+            background=[("pressed", palette["button_secondary_pressed"]), ("active", palette["button_secondary_active"])],
+            relief=[("pressed", "sunken"), ("!pressed", "raised")],
+        )
 
         # Update tk widgets after they are created
         if hasattr(self, "text_editor"):
@@ -365,21 +442,21 @@ class TextToAudioApp:
         self.input_file_entry.grid(row=0, column=1, sticky="we", **pad)
         self.input_file_entry.bind("<FocusIn>", self._on_input_focus_in)
         self.input_file_entry.bind("<FocusOut>", self._on_input_focus_out)
-        ttk.Button(file_frame, text="Browse", command=self._browse_input_file).grid(row=0, column=2, **pad)
+        ttk.Button(file_frame, text="Browse", command=self._browse_input_file, style="Primary.TButton").grid(row=0, column=2, **pad)
 
         ttk.Label(file_frame, text="Output file").grid(row=1, column=0, sticky="w", **pad)
         self.output_file_entry = tk.Entry(file_frame, textvariable=self.output_file_var, fg="#7a7a7a")
         self.output_file_entry.grid(row=1, column=1, sticky="we", **pad)
         self.output_file_entry.bind("<FocusIn>", self._on_output_focus_in)
         self.output_file_entry.bind("<FocusOut>", self._on_output_focus_out)
-        ttk.Button(file_frame, text="Browse", command=self._browse_output_file).grid(row=1, column=2, **pad)
+        ttk.Button(file_frame, text="Browse", command=self._browse_output_file, style="Primary.TButton").grid(row=1, column=2, **pad)
 
         ttk.Label(file_frame, text="Storage folder").grid(row=2, column=0, sticky="w", **pad)
         self.storage_entry = tk.Entry(file_frame, textvariable=self.storage_folder_var, fg="#7a7a7a")
         self.storage_entry.grid(row=2, column=1, sticky="we", **pad)
         self.storage_entry.bind("<FocusIn>", self._on_storage_focus_in)
         self.storage_entry.bind("<FocusOut>", self._on_storage_focus_out)
-        ttk.Button(file_frame, text="Pick Folder", command=self._browse_storage_folder).grid(row=2, column=2, **pad)
+        ttk.Button(file_frame, text="Pick Folder", command=self._browse_storage_folder, style="Primary.TButton").grid(row=2, column=2, **pad)
         file_frame.columnconfigure(1, weight=1)
 
         voice_frame = ttk.LabelFrame(top_row, text="Voice & Emotion", style="Section.TLabelframe")
@@ -423,7 +500,7 @@ class TextToAudioApp:
 
         editor_actions = ttk.Frame(text_frame)
         editor_actions.pack(fill="x", padx=10, pady=(0, 10))
-        ttk.Button(editor_actions, text="Clear Text", command=self._clear_text).pack(side="left")
+        ttk.Button(editor_actions, text="Clear Text", command=self._clear_text, style="Secondary.TButton").pack(side="left")
         ttk.Label(editor_actions, textvariable=self.char_count_var, style="Muted.TLabel").pack(side="right")
 
         action_frame = ttk.LabelFrame(main_row, text="Generate & Play", style="Section.TLabelframe")
@@ -446,7 +523,7 @@ class TextToAudioApp:
             width=9,
         )
         self.play_pause_btn.pack(side="left")
-        ttk.Button(play_row, text="⏹", command=self._on_stop, style="Icon.TButton", width=3).pack(side="left", padx=(6, 0))
+        ttk.Button(play_row, text="⏹", command=self._on_stop, style="Danger.TButton", width=3).pack(side="left", padx=(6, 0))
 
         ttk.Label(action_frame, text="Selected audio:", style="Muted.TLabel").pack(anchor="w", padx=8)
         ttk.Label(action_frame, textvariable=self.selected_audio_var, wraplength=260).pack(anchor="w", padx=8, pady=(0, 8))
@@ -463,8 +540,8 @@ class TextToAudioApp:
 
         history_actions = ttk.Frame(history_frame)
         history_actions.pack(fill="x", padx=10, pady=(0, 10))
-        ttk.Button(history_actions, text="Use Selected", command=self._use_selected_history).pack(side="left")
-        ttk.Button(history_actions, text="Play Selected", command=self._play_selected_history).pack(side="left", padx=6)
+        ttk.Button(history_actions, text="Use Selected", command=self._use_selected_history, style="Secondary.TButton").pack(side="left")
+        ttk.Button(history_actions, text="Play Selected", command=self._play_selected_history, style="Primary.TButton").pack(side="left", padx=6)
 
         # Help tab
         help_frame = ttk.LabelFrame(help_tab, text="How to Use", style="Section.TLabelframe")
