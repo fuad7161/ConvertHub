@@ -1,2 +1,4 @@
 /docs
 /audio
+__pycache__
+*.pyc
